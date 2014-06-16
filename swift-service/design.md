@@ -16,27 +16,27 @@ available to developers using the client library.
 
 ### Contents
 
-- [Goal](#goal)
-- [Current API](#current-api)
-- [Proposal](#proposal)
--- [Service API](#service-api)
--- [Operation Results](#operation-results)
--- [Multithreading](#multithreading)
-- [Examples](#example-usage)
--- [Upload](#upload)
--- [Delete](#delete)
-- [Review](#review)
+* [Goal](#goal)
+* [Current API](#current-api)
+* [Proposal](#proposal)
+ * [Service API](#service-api)
+ * [Operation Results](#operation-results)
+ * [Multithreading](#multithreading)
+* [Examples](#example-usage)
+ * [Upload](#upload)
+ * [Delete](#delete)
+* [Review](#review)
 
 ## Goal
 
 The goal of this document is to propose an update to ```python-swiftclient```
 to make the logic in ```shell.py``` available to developers via a new API:
 
-- Move swift operation logic from ```shell.py``` into a new file,
+* Move swift operation logic from ```shell.py``` into a new file,
   ```service.py```.
-- Provide a new high-level re-entrant API in ```service.py``` for accessing
+* Provide a new high-level re-entrant API in ```service.py``` for accessing
   the object store from multiple threads end user projects.
-- Convert the existing ```shell.py``` code to make use of the new high-level
+* Convert the existing ```shell.py``` code to make use of the new high-level
   API as an example of usage.
 
 ## Current API
@@ -74,14 +74,14 @@ with SwiftService() as swift:
 
 Having shown the example above, the new API proposal is as follows:
 
-- Move swift operation logic from ```shell.py``` into a new file,
+* Move swift operation logic from ```shell.py``` into a new file,
   ```service.py```.
-- Provide a context manager ```SwiftService``` giving a re-entrant connection to
+* Provide a context manager ```SwiftService``` giving a re-entrant connection to
   ```swift``` with a managed thread and connection pool for multiple
   operations.
-- Redesign the threading code in ```multithreading.py``` to allow multiple
+* Redesign the threading code in ```multithreading.py``` to allow multiple
   simultaneous operations.
-- A standard dictionary based result style containing all details of the
+* A standard dictionary based result style containing all details of the
   operation performed, an indication of whether the operation was performed
   successfully and all information provided by the low level client API.  
 
