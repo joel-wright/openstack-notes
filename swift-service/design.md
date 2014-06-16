@@ -15,14 +15,14 @@ available to developers using the client library.
 
 ### Contents
 
- - [Goal](#Goal)
- - [Current API](#Current API)
- - [Proposal](#Proposal)
-   - [Service API](#Service API)
-   - [Operation Results](#Operation Results)
-   - [Multithreading](#Multithreading)
- - [Examples](#Example Usage)
- - [Review](#Review)
+ - [Goal](#goal)
+ - [Current API](#current-api)
+ - [Proposal](#proposal)
+   - [Service API](#service-api)
+   - [Operation Results](#operation-results)
+   - [Multithreading](#multithreading)
+ - [Examples](#example-usage)
+ - [Review](#review)
 
 ## Goal
 
@@ -231,6 +231,9 @@ Where the possible ```action``` values are as follows:
     'delete_segment',
     'delete_object',
     'delete_container',
+    TODO:
+    'capabilities',
+    'stat'
 ]
 ```
 
