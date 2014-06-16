@@ -33,11 +33,11 @@ The goal of this document is to propose an update to ```python-swiftclient```
 to make the logic in ```shell.py``` available to developers via a new API:
 
 * Move swift operation logic from ```shell.py``` into a new file,
-  ```service.py```.
+```service.py```.
 * Provide a new high-level re-entrant API in ```service.py``` for accessing
-  the object store from multiple threads end user projects.
+the object store from multiple threads end user projects.
 * Convert the existing ```shell.py``` code to make use of the new high-level
-  API as an example of usage.
+API as an example of usage.
 
 ## Current API
 
@@ -75,15 +75,15 @@ with SwiftService() as swift:
 Having shown the example above, the new API proposal is as follows:
 
 * Move swift operation logic from ```shell.py``` into a new file,
-  ```service.py```.
+```service.py```.
 * Provide a context manager ```SwiftService``` giving a re-entrant connection to
-  ```swift``` with a managed thread and connection pool for multiple
-  operations.
+```swift``` with a managed thread and connection pool for multiple
+operations.
 * Redesign the threading code in ```multithreading.py``` to allow multiple
-  simultaneous operations.
+simultaneous operations.
 * A standard dictionary based result style containing all details of the
-  operation performed, an indication of whether the operation was performed
-  successfully and all information provided by the low level client API.  
+operation performed, an indication of whether the operation was performed
+successfully and all information provided by the low level client API.  
 
 ### Service API
 
