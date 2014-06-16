@@ -22,6 +22,9 @@ available to developers using the client library.
    - [Operation Results](#operation-results)
    - [Multithreading](#multithreading)
  - [Examples](#example-usage)
+   - [Upload](#upload)
+   - [Delete](#delete)
+   - [Download](#download)
  - [Review](#review)
 
 ## Goal
@@ -57,8 +60,8 @@ the API.
 ```python
 with SwiftService() as swift:
     container = 'tmp-container'
-    files = ['/tmp/file1', '/tmp/file2']
-    delete_iterator = swift.delete(container=container, objects=files)
+    objects_to_del = ['object1', 'path/to/object2']
+    delete_iterator = swift.delete(container=container, objects=objects_to_del)
     for result in delete_iterator:
         if result['success']:
             print("Object successfully deleted: %s" % result['object'])
@@ -267,7 +270,217 @@ The updated multithreading code can be found in ```multithreading.py```.
 ## Example Usage
 
 This section show some example usage of the new service API with examples drawn
-from the port of the existing command line utility to the new code.
+from the port of the existing command line utility to the new code. The purpose
+of this section is twofold; we wish to demonstrate how this API can be used to
+make end user code cleaner and more readable, and as a demonstration of how
+much logic is currently tied up in the command line client.
+
+### Upload
+
+
+### Delete
+
+```python
+    (options, args) = parse_args(parser, args)
+    args = args[1:]
+    if (not args and not options.yes_all) or (args and options.yes_all):
+        thread_manager.error('Usage: %s delete %s\n%s',
+                             BASENAME, st_delete_options,
+                             st_delete_help)
+        return
+
+    def _delete_segment(item, conn):
+        (container, obj) = item
+        conn.delete_object(container, obj)
+        if options.verbose:
+            if conn.attempts > 2:
+                thread_manager.print_msg(
+                    '%s/%s [after %d attempts]', container,
+                    obj, conn.attempts)
+            else:
+                thread_manager.print_msg('%s/%s', container, obj)
+
+    def _delete_object(item, conn):
+        (container, obj) = item
+        try:
+            old_manifest = None
+            query_string = None
+            if not options.leave_segments:
+                try:
+                    headers = conn.head_object(container, obj)
+                    old_manifest = headers.get('x-object-manifest')
+                    if config_true_value(
+                            headers.get('x-static-large-object')):
+                        query_string = 'multipart-manifest=delete'
+                except ClientException as err:
+                    if err.http_status != 404:
+                        raise
+            conn.delete_object(container, obj, query_string=query_string)
+            if old_manifest:
+                segment_manager = thread_manager.queue_manager(
+                    _delete_segment, options.object_threads,
+                    connection_maker=create_connection)
+                segment_queue = segment_manager.queue
+                scontainer, sprefix = old_manifest.split('/', 1)
+                scontainer = unquote(scontainer)
+                sprefix = unquote(sprefix).rstrip('/') + '/'
+                for delobj in conn.get_container(scontainer,
+                                                 prefix=sprefix)[1]:
+                    segment_queue.put((scontainer, delobj['name']))
+                if not segment_queue.empty():
+                    with segment_manager:
+                        pass
+            if options.verbose:
+                path = options.yes_all and join(container, obj) or obj
+                if path[:1] in ('/', '\\'):
+                    path = path[1:]
+                if conn.attempts > 1:
+                    thread_manager.print_msg('%s [after %d attempts]', path,
+                                             conn.attempts)
+                else:
+                    thread_manager.print_msg(path)
+        except ClientException as err:
+            if err.http_status != 404:
+                raise
+            thread_manager.error("Object '%s/%s' not found", container, obj)
+
+    def _delete_container(container, conn, object_queue):
+        try:
+            marker = ''
+            while True:
+                objects = [o['name'] for o in
+                           conn.get_container(container, marker=marker)[1]]
+                if not objects:
+                    break
+                for obj in objects:
+                    object_queue.put((container, obj))
+                marker = objects[-1]
+            while not object_queue.empty():
+                sleep(0.05)
+            attempts = 1
+            while True:
+                try:
+                    conn.delete_container(container)
+                    break
+                except ClientException as err:
+                    if err.http_status != 409:
+                        raise
+                    if attempts > 10:
+                        raise
+                    attempts += 1
+                    sleep(1)
+        except ClientException as err:
+            if err.http_status != 404:
+                raise
+            thread_manager.error('Container %r not found', container)
+
+    create_connection = lambda: get_conn(options)
+    obj_manager = thread_manager.queue_manager(
+        _delete_object, options.object_threads,
+        connection_maker=create_connection)
+    with obj_manager as object_queue:
+        cont_manager = thread_manager.queue_manager(
+            _delete_container, options.container_threads, object_queue,
+            connection_maker=create_connection)
+        with cont_manager as container_queue:
+            if not args:
+                conn = create_connection()
+                try:
+                    marker = ''
+                    while True:
+                        containers = [
+                            c['name']
+                            for c in conn.get_account(marker=marker)[1]]
+                        if not containers:
+                            break
+                        for container in containers:
+                            container_queue.put(container)
+                        marker = containers[-1]
+                except ClientException as err:
+                    if err.http_status != 404:
+                        raise
+                    thread_manager.error('Account not found')
+            elif len(args) == 1:
+                if '/' in args[0]:
+                    print(
+                        'WARNING: / in container name; you might have meant '
+                        '%r instead of %r.' % (
+                            args[0].replace('/', ' ', 1), args[0]),
+                        file=stderr)
+                container_queue.put(args[0])
+            else:
+                for obj in args[1:]:
+                    object_queue.put((args[0], obj))
+```
+
+Or as ported to the new service API, where the only required actions are to
+produce output, and only requires a list of objects:
+
+```python
+    (options, args) = parse_args(parser, args)
+    args = args[1:]
+    if (not args and not options.yes_all) or (args and options.yes_all):
+        output_manager.error('Usage: %s delete %s\n%s',
+                             BASENAME, st_delete_options,
+                             st_delete_help)
+        return
+
+    _opts = vars(options)
+    _opts['object_dd_threads'] = options.object_threads
+    with SwiftService(options=_opts) as swift:
+        try:
+            if not args:
+                del_iter = swift.delete()
+            else:
+                container = args[0]
+                if '/' in container:
+                    output_manager.error(
+                        'WARNING: / in container name; you '
+                        'might have meant %r instead of %r.' % (
+                        container.replace('/', ' ', 1), container)
+                    )
+                    return
+                objects = args[1:]
+                if objects:
+                    del_iter = swift.delete(container=container,
+                                            objects=objects)
+                else:
+                    del_iter = swift.delete(container=container)
+
+            for r in del_iter:
+                if r['success']:
+                    if options.verbose > 1:
+                        if r['action'] == 'delete_object':
+                            c = r['container']
+                            o = r['object']
+                            p = '%s/%s' % (c, o) if options.yes_all else o
+                            a = r['attempts']
+                            if a > 1:
+                                output_manager.print_msg(
+                                    '%s [after %d attempts]', p, a)
+                            else:
+                                output_manager.print_msg(p)
+
+                        elif r['action'] == 'delete_segment':
+                            c = r['container']
+                            o = r['object']
+                            p = '%s/%s' % (c, o)
+                            a = r['attempts']
+                            if a > 1:
+                                output_manager.print_msg(
+                                    '%s [after %d attempts]', p, a)
+                            else:
+                                output_manager.print_msg(p)
+
+                else:
+                    # Special case error prints
+                    output_manager.error("An unexpected error occurred whilst"
+                                         "deleting: %s" % r['error'])
+        except SwiftError as err:
+            output_manager.error(err.value)
+```
+
+### Download
 
 ...
 
