@@ -5,10 +5,11 @@ The current ```python-swiftclient``` provides a low-level client API for
 performing individual actions on the object store, and a command line utility.
 The code for the command line utility contains a large amount of logic for
 batch operations and multithreading, but none of this code is presented in a
-way that is terribly useful for end users. This means that developers using the
-```python-swiftclient``` code in their own projects must recreate the logic
-contained in ```shell.py```, which obviously has the disadvantage of missing
-bug fixes and features later added in client library.
+way that is terribly useful for end users because it mixes logic and output,
+and creates a new thread pool for each operation. This means that developers
+using the ```python-swiftclient``` code in their own projects must recreate
+the logic contained in ```shell.py```, which obviously has the disadvantage of
+missing bug fixes and features later added in client library.
 
 This design document proposes a number of changes to make this high-level logic
 available to developers using the client library.
@@ -24,7 +25,6 @@ available to developers using the client library.
  - [Examples](#example-usage)
    - [Upload](#upload)
    - [Delete](#delete)
-   - [Download](#download)
  - [Review](#review)
 
 ## Goal
@@ -32,25 +32,28 @@ available to developers using the client library.
 The goal of this document is to propose an update to ```python-swiftclient```
 to make the logic in ```shell.py``` available to developers via a new API:
 
-  - Move the vast majority of the operation logic from ```shell.py``` into a
-    new file, ```service.py```.
-  - Redesign the threading code in ```multithreading.py``` to allow multiple
-    simultaneous operations.
+  - Move swift operation logic from ```shell.py``` into a new file,
+    ```service.py```.
   - Provide a new high-level re-entrant API in ```service.py``` for accessing
-    the object store from end user projects.
+    the object store from multiple threads end user projects.
   - Convert the existing ```shell.py``` code to make use of the new high-level
-    API.
+    API as an example of usage.
 
 ## Current API
 
-The current API provides a low-level API for performing individual actions on
-an object store, and a command line utility with high-level
-
-...
+The current API provides low-level operations for performing individual actions on
+an object store, and a command line utility that contains a large amount of
+high-level application logic for performing operations on multiple objects
+using a thread pool. This high level logic cannot however be easily integrated
+into end-user projects because it mixes program logic with output for the
+command line utility, and requires a new thread pool for each operation. 
 
 ## Proposal
 
-Let's start this section off with a quick example which demonstrates a simple
+The API proposed in this document has been implemented and is currently under
+review [here](https://review.openstack.org/#/c/85453/).
+
+We'll begin the description with a quick example which demonstrates a simple
 case of the proposed usage of the service API. In the example below the end
 user would benefit from automatic handling of large object deletes, multiple
 connections to ```swift``` performing deletes in multiple threads, and an
@@ -71,12 +74,16 @@ with SwiftService() as swift:
 
 Having shown the example above, the new API proposal is as follows:
 
- - A context manager ```SwiftService``` providing a re-entrant connection to
-   ```swift``` with a managed thread and connection pool for multiple
-   operations.
- - A standard dictionary based result style containing all details of the
-   operation performed, an indication of whether the operation was performed
-   successfully and all information provided by the low level client API.  
+  - Move swift operation logic from ```shell.py``` into a new file,
+    ```service.py```.
+  - Provide a context manager ```SwiftService``` giving a re-entrant connection to
+    ```swift``` with a managed thread and connection pool for multiple
+    operations.
+  - Redesign the threading code in ```multithreading.py``` to allow multiple
+    simultaneous operations.
+  - A standard dictionary based result style containing all details of the
+    operation performed, an indication of whether the operation was performed
+    successfully and all information provided by the low level client API.  
 
 ### Service API
 
@@ -275,7 +282,26 @@ of this section is twofold; we wish to demonstrate how this API can be used to
 make end user code cleaner and more readable, and as a demonstration of how
 much logic is currently tied up in the command line client.
 
+Necessarily these examples are quite large, but they do nicely demonstrate the
+separation of operations and output that can be achieved after separating the
+program logic into operations on an instance of a swift connection, and the
+command line utility input/output operations.
+
 ### Upload
+
+We begin with the best example; uploading into the object store.
+
+At present ```shell.py``` contains a great deal of logic for uploading files
+into the object store, and mixes program output with the logic for deciding
+whether an object should be uploaded as an SLO/DLO, as well as code for
+creating containers and uploading object segments.
+
+In contrast, when all this high level logic is moved into ```service.py```
+the only thing the command line utility needs to do is parse command line 
+arguments, provide a list of files to upload, and process the results in order
+to give feedback to the user.
+
+And onto the comparison, first the code from the current ```shell.py```:  
 
 ```python
     (options, args) = parse_args(parser, args)
@@ -578,7 +604,7 @@ much logic is currently tied up in the command line client.
             thread_manager.error('Account not found')
 ```
 
-And wihtou...
+And now the same version of the repository ported to the new service API:
 
 ```python
     (options, args) = parse_args(parser, args)
@@ -663,6 +689,14 @@ And wihtou...
 ```
 
 ### Delete
+
+Similarly to the upload example, the current ```shell.py``` code mixes output
+with the program logic required to delete objects from the store, whilst also
+dealing with SLO/DLO segments and removing empty containers. Again, when
+ported to the new service API, program logic and output are separated, and all
+the logic is made available to end users as an importable library.
+
+Again, we start with the code from the current ```shell.py```:
 
 ```python
     (options, args) = parse_args(parser, args)
@@ -797,8 +831,7 @@ And wihtou...
                     object_queue.put((args[0], obj))
 ```
 
-Or as ported to the new service API, where the only required actions are to
-produce output, and only requires a list of objects:
+And again, the same version ported to the new service API:
 
 ```python
     (options, args) = parse_args(parser, args)
@@ -863,10 +896,6 @@ produce output, and only requires a list of objects:
         except SwiftError as err:
             output_manager.error(err.value)
 ```
-
-### Download
-
-...
 
 ## Review
 
