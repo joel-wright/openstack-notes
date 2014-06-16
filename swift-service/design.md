@@ -76,11 +76,11 @@ Having shown the example above, the new API proposal is as follows:
 
 * Move swift operation logic from ```shell.py``` into a new
 file, ```service.py```.
+* Redesign the threading code in ```multithreading.py``` to allow multiple
+simultaneous operations.
 * Provide a context manager ```SwiftService``` giving a re-entrant connection to
 ```swift``` with a managed thread and connection pool for multiple
 operations.
-* Redesign the threading code in ```multithreading.py``` to allow multiple
-simultaneous operations.
 * A standard dictionary based result style containing all details of the
 operation performed, an indication of whether the operation was performed
 successfully and all information provided by the low level client API.  
@@ -143,8 +143,10 @@ Upload a list of objects where an object is a tuple containing:
 """
 ```
 
-The default options are provided in ```service.py```, and any option may be
-overridden by supplying a dictionary containing the updated options.
+The default options are provided in ```service.py``` (as shown below), and any
+option may be overridden by supplying a dictionary containing the updated options,
+either when instantiating the ```SwiftService``` object, or for each individual
+operation.
 
 ```python
 _default_global_options = {
@@ -201,8 +203,6 @@ _default_local_options = {
     'human': False
 ```
 
-
-
 ### Operation Results
 
 Each operation provided by the service API returns a dictionary as a result,
@@ -241,14 +241,10 @@ Where the possible ```action``` values are as follows:
     'delete_segment',
     'delete_object',
     'delete_container',
-    TODO:
     'capabilities',
     'stat'
 ]
 ```
-
-NOTES: Need to follow the API style for stat and capabilities, and update stat
-to use 'options' not 'opts', and capabilities to take an 'options' key/value
 
 ### Multithreading
 
