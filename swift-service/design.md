@@ -32,8 +32,8 @@ available to developers using the client library.
 The goal of this document is to propose an update to ```python-swiftclient```
 to make the logic in ```shell.py``` available to developers via a new API:
 
-* Move swift operation logic from ```shell.py``` into a new file,
-```service.py```.
+* Move swift operation logic from ```shell.py``` into a new
+file, ```service.py```.
 * Provide a new high-level re-entrant API in ```service.py``` for accessing
 the object store from multiple threads end user projects.
 * Convert the existing ```shell.py``` code to make use of the new high-level
@@ -74,8 +74,8 @@ with SwiftService() as swift:
 
 Having shown the example above, the new API proposal is as follows:
 
-* Move swift operation logic from ```shell.py``` into a new file,
-```service.py```.
+* Move swift operation logic from ```shell.py``` into a new
+file, ```service.py```.
 * Provide a context manager ```SwiftService``` giving a re-entrant connection to
 ```swift``` with a managed thread and connection pool for multiple
 operations.
