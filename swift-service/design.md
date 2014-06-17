@@ -6,13 +6,14 @@ performing individual actions on the object store, and a command line utility.
 The code for the command line utility contains a large amount of logic for
 batch operations and multithreading, but none of this code is presented in a
 way that is terribly useful for end users because it mixes logic and output,
-and creates a new thread pool for each operation. This means that developers
+and requires a new thread pool for each operation. This means that developers
 using the ```python-swiftclient``` code in their own projects must recreate
 the logic contained in ```shell.py```, which obviously has the disadvantage of
-missing bug fixes and features later added in client library.
+missing bug fixes and features later added in the client library.
 
-This design document proposes a number of changes to make this high-level logic
-available to developers using the client library.
+This design document proposes a number of changes to make the high-level,
+mlutithreaded logic in ```shell.py``` available to developers via a new
+re-entrant "service" API.
 
 ### Contents
 
@@ -30,20 +31,21 @@ available to developers using the client library.
 ## Goal
 
 The goal of this document is to propose an update to ```python-swiftclient```
-to make the logic in ```shell.py``` available to developers via a new API:
+to make the high-level, multithreaded logic in ```shell.py``` available to
+developers via a new API. We propose the following changes:
 
 * Move swift operation logic from ```shell.py``` into a new
 file, ```service.py```.
 * Provide a new high-level re-entrant API in ```service.py``` for accessing
-the object store from multiple threads end user projects.
+the object store from multiple threads in end user projects.
 * Convert the existing ```shell.py``` code to make use of the new high-level
 API as an example of usage.
 
 ## Current API
 
-The current API provides low-level operations for performing individual actions on
-an object store, and a command line utility that contains a large amount of
-high-level application logic for performing operations on multiple objects
+The current API provides low-level operations for performing individual actions
+on a swift object store, and a command line utility that contains a large amount
+of high-level application logic for performing operations on multiple objects
 using a thread pool. This high level logic cannot however be easily integrated
 into end-user projects because it mixes program logic with output for the
 command line utility, and requires a new thread pool for each operation. 
@@ -81,25 +83,25 @@ simultaneous operations.
 * Provide a context manager ```SwiftService``` giving a re-entrant connection to
 ```swift``` with a managed thread and connection pool for multiple
 operations.
-* A standard dictionary based result style containing all details of the
-operation performed, an indication of whether the operation was performed
+* Deliver results in a standard dictionary based style containing all details of
+the operation performed, an indication of whether the operation was performed
 successfully and all information provided by the low level client API.  
 
 ### Service API
 
 The ```SwiftService``` object provides a context manager for managing access to
 a swift object store. This object can be created without any options, and will
-default to a set of options that correspond to the default options that would
-have been provided by the command line utility.
+default to a set of options that correspond to the default options of the ```swift```
+command line tool.
 
 ```python
 with SwiftService(options=None, timeout=864000) as swift:
     # Do work here
 ```
 
-Once created, the service API provides all the operations exposed by the
-```swift``` command line utility, each having an option to override any of the
-default/object options at a per-operation level:
+Once created, the service API provides all the operations exposed by the ```swift```
+command line tool, and each call takes an options dictionary that allows any of
+the default/object options to be overridden at a per-operation level:
 
 ```python
 # Stat an account/container/object
@@ -124,7 +126,8 @@ SwiftService.delete(container=None, objects=None, options=None)
 SwiftService.capabilities(url=None, options=None)
 ```
 
-All the above operations behave in the obvious fashion except for upload, which
+All the above operations behave in the obvious fashion, either taking a string
+or list of strings to represent object/container names, except for upload, which
 has a specification for the object list as follows (example usage of this API
 follows later):
 
@@ -143,10 +146,10 @@ Upload a list of objects where an object is a tuple containing:
 """
 ```
 
-The default options are provided in ```service.py``` (as shown below), and any
-option may be overridden by supplying a dictionary containing the updated options,
-either when instantiating the ```SwiftService``` object, or for each individual
-operation.
+The default options for the ```SwiftService``` object are provided in ```service.py```
+(as shown below), and any option may be overridden by supplying a dictionary
+containing the updated options, either when instantiating the ```SwiftService```
+object, or for each individual operation call.
 
 ```python
 _default_global_options = {
@@ -205,10 +208,18 @@ _default_local_options = {
 
 ### Operation Results
 
-Each operation provided by the service API returns a dictionary as a result,
-either as via an iterator in the case that the operation may perform multiple
-operations, or directly in the case of single operation calls. An example
-result dictionary is given below:
+Each operation provided by the service API either raises a ```SwiftError```
+if the operation failed completely, or returns one of the following:
+
+* A dictionary detailing the results of the operation.
+* An iterator that produces result dictionaries (for calls that perform multiple
+sub-operations).
+
+A result dictionary can indicate both success and failure (detailed in
+the ```success``` key), and will either contain the successful result, or
+an ```error``` key detailing the error encountered.
+
+An example result dictionary is given below:
 
 ```python
 result = {
@@ -230,19 +241,18 @@ Where the possible ```action``` values are as follows:
 
 ```python
 [
+    'stat'
     'post',
     'list',
     'download_object',
-    'upload_object',
     'create_container',
-    'create_dir_marker',
-    'upload_segment',
     'upload_object',
-    'delete_segment',
-    'delete_object',
+    'upload_segment',
+    'create_dir_marker',
     'delete_container',
+    'delete_object',
+    'delete_segment',
     'capabilities',
-    'stat'
 ]
 ```
 
