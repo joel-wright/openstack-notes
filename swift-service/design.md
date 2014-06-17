@@ -12,7 +12,7 @@ the logic contained in ```shell.py```, which obviously has the disadvantage of
 missing bug fixes and features later added in the client library.
 
 This design document proposes a number of changes to make the high-level,
-mlutithreaded logic in ```shell.py``` available to developers via a new
+multithreaded logic in ```shell.py``` available to developers via a new
 re-entrant "service" API.
 
 ### Contents
