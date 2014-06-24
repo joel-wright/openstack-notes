@@ -95,7 +95,7 @@ default to a set of options that correspond to the default options of the ```swi
 command line tool.
 
 ```python
-with SwiftService(options=None, timeout=864000) as swift:
+with SwiftService(options=None) as swift:
     # Do work here
 ```
 
