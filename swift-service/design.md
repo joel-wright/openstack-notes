@@ -666,7 +666,7 @@ And now the same version of the repository ported to the new service API:
 
             for r in swift.upload(container, objs + dir_markers):
                 if r['success']:
-                    if options.verbose > 1:
+                    if options.verbose:
                         if 'attempts' in r and r['attempts'] > 1:
                             if 'object' in r:
                                 output_manager.print_msg(
@@ -679,8 +679,8 @@ And now the same version of the repository ported to the new service API:
                                 output_manager.print_msg(r['object'])
                             elif 'for_object' in r:
                                 output_manager.print_msg(
-                                    'Segment %s for %s' % (r['segment_index'],
-                                                           r['for_object'])
+                                    '%s segment %s' % (r['for_object'],
+                                                       r['segment_index'])
                                 )
                 else:
                     error = r['error']
@@ -872,7 +872,7 @@ And again, the same version ported to the new service API:
 
             for r in del_iter:
                 if r['success']:
-                    if options.verbose > 1:
+                    if options.verbose:
                         if r['action'] == 'delete_object':
                             c = r['container']
                             o = r['object']
